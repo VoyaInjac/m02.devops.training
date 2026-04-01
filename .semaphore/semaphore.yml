@@ -1,84 +1,132 @@
 version: v1.0
-name: DevOps Training Pipeline
+name: "DevOps Training Pipeline"
 agent:
   machine:
-    type: e1-standard-2
-    os_image: ubuntu2004
-
+    type: f1-standard-4
+    os_image: ubuntu2404
+fail_fast:
+  stop:
+    when: branch != 'main'
+auto_cancel:
+  running:
+    when: branch != 'main'
+  queued:
+    when: branch = 'main'
 blocks:
-  - name: "Block 1: Install dependencies"
+  - name: Install dependencies
+    dependencies: []
     task:
       jobs:
-        - name: Install
+        - name: Install python dependencies
           commands:
-            - sem-version python 3.12
+            - checkout
+            - sudo apt-get update && sudo apt-get install -y python3-venv
+            - python -m venv .venv
+            - source .venv/bin/activate
             - pip install pytest requests flask coverage locust
+            - 'cache store venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master .venv'
 
-  - name: "Block 2: Unit tests"
+  - name: Run Unit Tests
+    dependencies:
+      - Install dependencies
     task:
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
       jobs:
-        - name: TDD and unit tests
+        - name: Run Unit Tests
           commands:
-            - sem-version python 3.12
-            - pip install pytest
-            - cd 1-tdd && python -m pytest test_factorial.py -v
-            - cd ../2-unit-testing && python -m pytest test_math_sum.py -v
+            - (cd 1-tdd && python -m pytest test_factorial.py -v)
+            - (cd 2-unit-testing && python -m pytest test_math_sum.py -v)
 
-  - name: "Block 3: Integration tests"
+  - name: Run Integration Tests
+    dependencies:
+      - Run Unit Tests
     task:
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
       jobs:
-        - name: Integration and mocking
+        - name: Run Integration Tests
           commands:
-            - sem-version python 3.12
-            - pip install pytest
-            - cd 3-integration-testing && python -m pytest test_integration.py -v
-            - cd ../6-mocking && python -m pytest test_weather_service.py -v
+            - (cd 3-integration-testing && python -m pytest test_integration.py -v)
+            - (cd 6-mocking && python -m pytest test_weather_service.py -v)
 
-  - name: "Block 4: End-to-end tests"
+  - name: Run End-to-End Tests
+    dependencies:
+      - Run Integration Tests
     task:
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
       jobs:
-        - name: E2E Flask
+        - name: Run End-to-End Tests
           commands:
-            - sem-version python 3.12
-            - pip install pytest requests flask
-            - cd 4-e2e && nohup python app.py &
+            - 'cd 4-e2e && nohup python app.py &'
             - sleep 3
-            - cd 4-e2e && python -m pytest test_e2e.py -v
+            - (cd 4-e2e && python -m pytest test_e2e.py -v)
 
-  - name: "Block 5: Test coverage"
+  - name: Run Test Coverage
+    dependencies:
+      - Run End-to-End Tests
     task:
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
       jobs:
-        - name: Coverage
+        - name: Run Test Coverage
           commands:
-            - sem-version python 3.12
-            - pip install pytest coverage
-            - cd 7-test-coverage && coverage run -m pytest test_calculator.py -v
-            - cd 7-test-coverage && coverage report -m
+            - (cd 7-test-coverage && coverage run -m pytest test_calculator.py -v)
+            - (cd 7-test-coverage && coverage report -m)
 
-  - name: "Block 6: Performance testing"
+  - name: Run Performance Tests
+    dependencies:
+      - Run End-to-End Tests
     task:
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
       jobs:
-        - name: Locust headless
+        - name: Run Locust headless
           commands:
-            - sem-version python 3.12
-            - pip install flask locust
             - nohup python -c "import sys; sys.path.insert(0, '4-e2e'); from app import app; app.run()" &
             - sleep 3
             - cd 8-performance-testing && locust -f locustfile.py --host=http://127.0.0.1:5000 --headless -u 10 -r 2 --run-time 30s
 
-  - name: "Block 7: Test reports"
+  - name: Run Test Reports
+    dependencies:
+      - Run Test Coverage
+      - Run Performance Tests
     task:
-      jobs:
-        - name: Pytest reports
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
+      epilogue:
+        always:
           commands:
-            - sem-version python 3.12
-            - cd 5-test-reports && pip install -r requirements.txt
-            - cd 5-test-reports && pytest --junitxml=reports.xml
-            - "[[ -f 5-test-reports/reports.xml ]] && test-results publish 5-test-reports/reports.xml"
+            - 'test-results publish 5-test-reports/reports.xml || true'
+            - 'artifact push workflow -f -d .semaphore/REPORT.md REPORT.md || true'
+      jobs:
+        - name: Run Test Reports
+          commands:
+            - (cd 5-test-reports && pip install -r requirements.txt)
+            - (cd 5-test-reports && pytest --junitxml=reports.xml)
 
 after_pipeline:
   task:
     jobs:
-      - name: Publish pipeline report
+      - name: After pipeline job
         commands:
-          - test-results gen-pipeline-report
+          - 'test-results gen-pipeline-report'
