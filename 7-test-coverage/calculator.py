@@ -1,38 +1,54 @@
+import math
+
+
 def add(a, b):
-    raise NotImplementedError("Implement add using TDD")
+    return a + b
 
 
 def subtract(a, b):
-    raise NotImplementedError("Implement subtract using TDD")
+    return a - b
 
 
 def multiply(a, b):
-    raise NotImplementedError("Implement multiply using TDD")
+    return a * b
 
 
 def divide(a, b):
-    raise NotImplementedError("Implement divide using TDD")
+    if b == 0:
+        raise ValueError("Ne moze se deliti sa nulom")
+    return a / b
 
 
 def power(base, exponent):
-    raise NotImplementedError("Implement power using TDD")
+    return base ** exponent
 
 
 def square_root(n):
-    raise NotImplementedError("Implement square_root using TDD")
+    if n < 0:
+        raise ValueError("Ne moze se koreniti negativan broj")
+    return math.sqrt(n)
 
 
 def modulo(a, b):
-    raise NotImplementedError("Implement modulo using TDD")
+    if b == 0:
+        raise ValueError("Delilac ne moze biti nula")
+    return a % b
 
 
 def is_even(n):
-    raise NotImplementedError("Implement is_even using TDD")
+    return n % 2 == 0
 
 
 def is_positive(n):
-    raise NotImplementedError("Implement is_positive using TDD")
+    return n > 0
 
 
 def factorial(n):
-    raise NotImplementedError("Implement factorial using TDD")
+    if n < 0:
+        raise ValueError("n ne moze biti negativan")
+    if n == 0:
+        return 1
+    result = 1
+    for i in range(2, n + 1):
+        result = result * i
+    return result

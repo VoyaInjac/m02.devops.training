@@ -1,0 +1,84 @@
+version: v1.0
+name: DevOps Training Pipeline
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu2004
+
+blocks:
+  - name: "Block 1: Install dependencies"
+    task:
+      jobs:
+        - name: Install
+          commands:
+            - sem-version python 3.12
+            - pip install pytest requests flask coverage locust
+
+  - name: "Block 2: Unit tests"
+    task:
+      jobs:
+        - name: TDD and unit tests
+          commands:
+            - sem-version python 3.12
+            - pip install pytest
+            - cd 1-tdd && python -m pytest test_factorial.py -v
+            - cd ../2-unit-testing && python -m pytest test_math_sum.py -v
+
+  - name: "Block 3: Integration tests"
+    task:
+      jobs:
+        - name: Integration and mocking
+          commands:
+            - sem-version python 3.12
+            - pip install pytest
+            - cd 3-integration-testing && python -m pytest test_integration.py -v
+            - cd ../6-mocking && python -m pytest test_weather_service.py -v
+
+  - name: "Block 4: End-to-end tests"
+    task:
+      jobs:
+        - name: E2E Flask
+          commands:
+            - sem-version python 3.12
+            - pip install pytest requests flask
+            - cd 4-e2e && nohup python app.py &
+            - sleep 3
+            - cd 4-e2e && python -m pytest test_e2e.py -v
+
+  - name: "Block 5: Test coverage"
+    task:
+      jobs:
+        - name: Coverage
+          commands:
+            - sem-version python 3.12
+            - pip install pytest coverage
+            - cd 7-test-coverage && coverage run -m pytest test_calculator.py -v
+            - cd 7-test-coverage && coverage report -m
+
+  - name: "Block 6: Performance testing"
+    task:
+      jobs:
+        - name: Locust headless
+          commands:
+            - sem-version python 3.12
+            - pip install flask locust
+            - nohup python -c "import sys; sys.path.insert(0, '4-e2e'); from app import app; app.run()" &
+            - sleep 3
+            - cd 8-performance-testing && locust -f locustfile.py --host=http://127.0.0.1:5000 --headless -u 10 -r 2 --run-time 30s
+
+  - name: "Block 7: Test reports"
+    task:
+      jobs:
+        - name: Pytest reports
+          commands:
+            - sem-version python 3.12
+            - cd 5-test-reports && pip install -r requirements.txt
+            - cd 5-test-reports && pytest --junitxml=reports.xml
+            - "[[ -f 5-test-reports/reports.xml ]] && test-results publish 5-test-reports/reports.xml"
+
+after_pipeline:
+  task:
+    jobs:
+      - name: Publish pipeline report
+        commands:
+          - test-results gen-pipeline-report
