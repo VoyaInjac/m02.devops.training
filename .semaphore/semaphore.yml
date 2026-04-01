@@ -13,37 +13,39 @@ auto_cancel:
   queued:
     when: branch = 'main'
 blocks:
-  - name: Install dependencies
+  - name: TDD Tests
     dependencies: []
     task:
-      jobs:
-        - name: Install python dependencies
-          commands:
-            - checkout
-            - sudo apt-get update && sudo apt-get install -y python3-venv
-            - python -m venv .venv
-            - source .venv/bin/activate
-            - pip install pytest requests flask coverage locust
-            - 'cache store venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master .venv'
-
-  - name: Run Unit Tests
-    dependencies:
-      - Install dependencies
-    task:
       prologue:
         commands:
           - checkout
-          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - sudo apt-get update && sudo apt-get install -y python3-venv
+          - python -m venv .venv
           - source .venv/bin/activate
+          - pip install pytest requests flask coverage locust
+          - 'cache store venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master .venv'
       jobs:
-        - name: Run Unit Tests
+        - name: TDD
           commands:
             - (cd 1-tdd && python -m pytest test_factorial.py -v)
+
+  - name: Unit Tests
+    dependencies:
+      - TDD Tests
+    task:
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
+      jobs:
+        - name: Units
+          commands:
             - (cd 2-unit-testing && python -m pytest test_math_sum.py -v)
 
-  - name: Run Integration Tests
+  - name: Integration Tests
     dependencies:
-      - Run Unit Tests
+      - Unit Tests
     task:
       prologue:
         commands:
@@ -51,14 +53,13 @@ blocks:
           - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
           - source .venv/bin/activate
       jobs:
-        - name: Run Integration Tests
+        - name: Integration
           commands:
             - (cd 3-integration-testing && python -m pytest test_integration.py -v)
-            - (cd 6-mocking && python -m pytest test_weather_service.py -v)
 
-  - name: Run End-to-End Tests
+  - name: Mocking Tests
     dependencies:
-      - Run Integration Tests
+      - Integration Tests
     task:
       prologue:
         commands:
@@ -66,15 +67,29 @@ blocks:
           - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
           - source .venv/bin/activate
       jobs:
-        - name: Run End-to-End Tests
+        - name: Mocking
+          commands:
+            - (cd 6-mocking && python -m pytest test_weather_service.py -v)
+
+  - name: End-to-End Tests
+    dependencies:
+      - Mocking Tests
+    task:
+      prologue:
+        commands:
+          - checkout
+          - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
+          - source .venv/bin/activate
+      jobs:
+        - name: E2E
           commands:
             - 'cd 4-e2e && nohup python app.py &'
             - sleep 3
             - (cd 4-e2e && python -m pytest test_e2e.py -v)
 
-  - name: Run Test Coverage
+  - name: Test Coverage
     dependencies:
-      - Run End-to-End Tests
+      - End-to-End Tests
     task:
       prologue:
         commands:
@@ -82,14 +97,14 @@ blocks:
           - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
           - source .venv/bin/activate
       jobs:
-        - name: Run Test Coverage
+        - name: Coverage
           commands:
             - (cd 7-test-coverage && coverage run -m pytest test_calculator.py -v)
             - (cd 7-test-coverage && coverage report -m)
 
-  - name: Run Performance Tests
+  - name: Performance Tests
     dependencies:
-      - Run End-to-End Tests
+      - End-to-End Tests
     task:
       prologue:
         commands:
@@ -97,16 +112,16 @@ blocks:
           - 'cache restore venv-$SEMAPHORE_WORKFLOW_ID,venv-$SEMAPHORE_BRANCH,venv-master'
           - source .venv/bin/activate
       jobs:
-        - name: Run Locust headless
+        - name: Locust
           commands:
             - nohup python -c "import sys; sys.path.insert(0, '4-e2e'); from app import app; app.run()" &
             - sleep 3
             - cd 8-performance-testing && locust -f locustfile.py --host=http://127.0.0.1:5000 --headless -u 10 -r 2 --run-time 30s
 
-  - name: Run Test Reports
+  - name: Test Reports
     dependencies:
-      - Run Test Coverage
-      - Run Performance Tests
+      - Test Coverage
+      - Performance Tests
     task:
       prologue:
         commands:
@@ -119,7 +134,7 @@ blocks:
             - 'test-results publish 5-test-reports/reports.xml || true'
             - 'artifact push workflow -f -d .semaphore/REPORT.md REPORT.md || true'
       jobs:
-        - name: Run Test Reports
+        - name: Tests
           commands:
             - (cd 5-test-reports && pip install -r requirements.txt)
             - (cd 5-test-reports && pytest --junitxml=reports.xml)
