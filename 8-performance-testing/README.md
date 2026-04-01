@@ -5,6 +5,7 @@
 ## Context
 
 Performance testing ensures your application can handle expected load. Types:
+
 - **Load testing** - normal expected load
 - **Stress testing** - beyond normal capacity
 - **Endurance testing** - sustained load over time
@@ -44,3 +45,5 @@ Note: This exercise uses the Flask app from Module 4 (E2E).
 - Increase load to 50 users
 - Identify the breaking point
 - Compare response times between endpoints
+
+## Vojica Injac
